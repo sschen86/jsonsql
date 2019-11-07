@@ -2,6 +2,7 @@ module.exports = {
     extends: [
         '@smartx/eslint-config-tentative',
     ],
+    parser: "babel-eslint",
     parserOptions: { 
         ecmaVersion: 7
     },

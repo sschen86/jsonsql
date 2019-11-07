@@ -39,6 +39,67 @@ GroupMatcher
 RuleMatcher
 LinkMatcher
 
+
+((A+ B+ C?) | (A* A+ A?))
+
+@Group{
+    @Group{
+        @Pattern
+        @Pattern
+        @Pattern
+    }
+    @Group{
+        @Pattern
+        @Pattern
+        @Pattern
+    }
+}
+
+
+new Matcher({ source, stopPropagation, before, done })
+
+
+
+@group{
+    @m = 1
+    @n = 1
+    @orFirstChild<Group>{
+        @andFirstChild<Pattern>{
+            @nextSibling<Pattern>{
+                @nextSibling<Pattern>{
+                    @previousSibling<Pattern>
+                }
+                @previousSibling<Pattern>
+            }
+        }
+        @nextSibling<Group>{
+            @andFirstChild<Pattern>{
+                @nextSibling<Pattern>{
+                     @nextSibling<Pattern>{
+                    
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Group{
+    m = 1
+    n = 1
+    orFirstChild
+    orNowChild
+}
+
+@Pattern{
+    m = 1
+    n = 1
+}
+
+
+
+
+
 GroupMatcher{
     groups: [
         {}
