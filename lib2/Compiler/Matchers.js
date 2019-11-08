@@ -18,6 +18,10 @@ class Matcher {
         this.m = m
         this.n = n
     }
+
+    scan () {
+        throw Error(`Matcher.scan must be override by ${this.constructor.name}.scan`)
+    }
 }
 
 class RootMatcher {
@@ -35,6 +39,10 @@ class HookMatcher extends Matcher {
         this._source = source
         this._child = this._parseSource(id, source)
         matchers[id] = this
+    }
+
+    scan (parentRuntime) {
+        console.info({ parentRuntime })
     }
 
     _parseSource (id, source) {
