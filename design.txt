@@ -1,0 +1,82 @@
+@Matcher{ // 匹配器
+    @m // 必选匹配分量
+    @n // 可选匹配分量
+    @child // 子级匹配器
+    @orFirstChild // 分组子节点
+
+    @state // 状态：1.已创建；2.匹配必选项，3.匹配可选项
+
+    @run() // 进入匹配器
+
+
+    状态1：继续，
+    状态2：成功信号 -> 继续, 失败信号 -> 抛出失败信号
+    状态3：成功信号 -> 继续，失败信号 -> 抛出成功信号
+
+}
+
+
+
+@PatternMatcher{ // 模式匹配器，RuleMatcher，StringMatcher
+    @match() // 执行匹配
+
+    1. 匹配必选项：成功信号 -> 继续
+}
+
+@GroupMatcher{ // 群组匹配器
+    @orFirstChild{
+        @andFirstChild{
+            @nextSibling
+        }
+        @nextSibling
+    }
+
+    @run() // 进入匹配器
+
+    1. 匹配必选项：成功信号 -> 继续，失败信号 -> 存在or分支-> 进入下一个分支继续; 不存在or分支 -> 抛出失败信号
+    2. 匹配可选项：成功信号 -> 继续；失败信号 -> 存在or分支 -> 进入下一个分支继续；不存在or分支 -> 抛出成功信号
+
+    // (A|B)+ BBA
+
+
+    continue() // 继续
+    nextOr() // 下一个分支
+    reject() // 抛出错误
+    resolve() // 抛出成功
+
+}
+
+
+
+
+
+
+@orFirstChild{
+    @andFirstChild{
+        @nextSibling
+    }
+    @nextSibling
+}
+
+
+
+
+
+
+
+
+
+       
+
+
+
+
+
+
+
+
+
+
+
+
+
