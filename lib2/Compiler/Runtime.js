@@ -2,7 +2,6 @@ const logger = {
     create: !true,
     resolve: true,
     reject: true,
-    matchSuccess: true,
 }
 
 let PID = 0
@@ -51,21 +50,48 @@ class Runtime {
             this.bIndex = this.sr.chIndex
             this.eIndex = this.sr.chIndex
         }
-        logger.resolve && console.warn(`${this.matcher.constructor.name} Runtime resolve`, this.sr.text(this.bIndex, this.eIndex))
+        logger.resolve && console.warn(`${this.matcher.constructor.name} resolve ${this.matcher._id}`, this.sr.text(this.bIndex, this.eIndex))
 
         // 触发父级子项扫描成功
         this.parent.matcher.matchSuccess(this)
     }
 
     reject (error) {
-        if (error) {
+        logger.reject && console.warn(`${this.matcher.constructor.name} reject`, this.matcher, error)
+
+        if (typeof error === 'number') {
+            error = { stack: [ this ], message: '匹配错误', bIndex: error, text: this.sr.text(error) }
+        } else if (typeof error === 'object') {
             error.stack.push(this)
-        } else {
-            error = { stack: [ this ], message: '匹配错误222', bIndex: this.sr.chIndex }
         }
 
         this.parent.matcher.matchFailure(this, error)
     }
 }
 
+Runtime.prototype.resolve = killRecursion(Runtime.prototype.resolve)
+Runtime.prototype.reject = killRecursion(Runtime.prototype.reject)
+
+
 module.exports = Runtime
+
+
+function killRecursion (recursion) {
+    let scanIsRun = false
+    let contextArgs
+    let contextThat
+    return function () {
+        contextArgs = arguments
+        contextThat = this
+        if (!scanIsRun) {
+            // console.info('startScan')
+            scanIsRun = true
+            while (contextArgs) {
+                const args = contextArgs
+                contextArgs = null
+                recursion.apply(contextThat, args)
+            }
+            scanIsRun = false
+        }
+    }
+}

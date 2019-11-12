@@ -39,7 +39,7 @@ class Compiler {
         const mainMatcher = this._matchers[id]
         let maxNum = 0
         try {
-            while (sr.notEOF() && maxNum++ < 3) {
+            while (sr.notEOF() && maxNum++ < Infinity) {
                 sr.use(mainMatcher)
             }
             return sr.tree()

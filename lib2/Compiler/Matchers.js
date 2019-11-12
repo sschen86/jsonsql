@@ -13,7 +13,7 @@ class Matcher {
 
         const originScan = this.scan
         this.scan = (parentRuntime) => {
-            logger.scaning && (console.warn(`${this.constructor.name} scaning`, this))
+            logger.scaning && (console.warn(`${this.constructor.name} scaning 【${parentRuntime.sr.chIndex}  ${parentRuntime.sr.chNow}】`, this))
             originScan.call(this, parentRuntime)
         }
     }
@@ -61,8 +61,6 @@ class RootMatcher extends Matcher {
         this.resolve(childRuntime)
     }
 }
-
-
 class HookMatcher extends Matcher {
     constructor (id, { before, done, source }) {
         super()
@@ -295,12 +293,22 @@ class GroupMatcher extends Matcher {
 
         // 进入或分支进行扫描
         if (thisRuntime.orChild.nextSibling) {
+            // 储存当前错误，进入或分支扫描
+
+            // 假如新的错误扫描的更远，则更新错误
+            thisRuntime.error = thisRuntime.error && thisRuntime.error.bIndex >= error.bIndex ? thisRuntime.error : error
+
+            console.info('######## or分支', thisRuntime)
+
             thisRuntime.orChild = thisRuntime.orChild.nextSibling
             thisRuntime.andChild = thisRuntime.orChild.andFirstChild
             thisRuntime.andChild.scan(thisRuntime)
         } else {
             if (thisRuntime.matchs < this.m) {
-                thisRuntime.reject(error)
+                thisRuntime.error = thisRuntime.error && thisRuntime.error.bIndex >= error.bIndex ? thisRuntime.error : error
+
+                console.info('######## 全部错误', thisRuntime)
+                thisRuntime.reject(thisRuntime.error)
             } else {
                 this._resolve(thisRuntime)
             }
@@ -322,6 +330,7 @@ class GroupMatcher extends Matcher {
         delete thisRuntime.tempChilds
         delete thisRuntime.tempFirstChild
         delete thisRuntime.tempLastChild
+        delete thisRuntime.error
         thisRuntime.resolve()
     }
 }
@@ -381,7 +390,7 @@ class RuleMatcher extends Matcher {
             thisRuntime.resolve(bIndex, sr.chIndex)
         } else {
             sr.rollback()
-            thisRuntime.reject()
+            thisRuntime.reject(bIndex)
         }
     }
 }
@@ -423,7 +432,7 @@ class StringMatcher extends Matcher {
             }
             thisRuntime.resolve(bIndex, sr.chIndex)
         } else {
-            thisRuntime.reject()
+            thisRuntime.reject(bIndex)
         }
     }
 

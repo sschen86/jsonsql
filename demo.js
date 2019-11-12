@@ -13,14 +13,15 @@ const result = jsonsql.compile(`
 `)
 */
 
+const bigJsonSqlCode = require('./bigJsonSqlCode')
+console.time('compile')
 const result = jsonsql.compile(`
-    @abc 123 /// + string 测试字段111
-    @bbb 123 /// + string,null 测试222
+    ${bigJsonSqlCode}
 `)
 // @2age 1 /// + string,null 年龄
 // @age2 2 /// - string,nll 年龄2
 // @age3 3
-
+console.timeEnd('compile')
 console.info(result)
 
 

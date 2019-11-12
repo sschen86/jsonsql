@@ -45,10 +45,10 @@ function scanner (code) {
         chNow: BOF,
         notEOF: () => sr.chIndex < chAlls.length,
         use (matcher) {
-            console.info('use', sr.chIndex, chAlls)
+            // console.info('use', sr.chIndex, chAlls)
 
             matcher.scan(new Runtime(null, new RootMatcher((thisRuntime) => {
-                console.info('resolve===', thisRuntime)
+                // console.info('resolve===', thisRuntime)
             }, (thisRuntime, error) => {
                 console.info(thisRuntime, error)
                 throw Error('解析出错啦')
