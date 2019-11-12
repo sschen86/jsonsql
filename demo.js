@@ -14,7 +14,8 @@ const result = jsonsql.compile(`
 */
 
 const result = jsonsql.compile(`
-    abcd@aaaaaaa 888
+    @abc 123 /// + string 测试字段111
+    @bbb 123 /// + string,null 测试222
 `)
 // @2age 1 /// + string,null 年龄
 // @age2 2 /// - string,nll 年龄2

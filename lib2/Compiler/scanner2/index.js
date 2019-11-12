@@ -1,4 +1,4 @@
-const Runtime = require('./Runtime')
+const Runtime = require('../Runtime')
 const { RootMatcher } = require('../Matchers')
 
 module.exports = scanner

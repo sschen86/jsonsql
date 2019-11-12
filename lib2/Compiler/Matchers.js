@@ -1,6 +1,8 @@
 
+
 const logger = {
     created: false, // 创建匹配器时
+    scaning: true, // 开始扫描时
 }
 
 const matchers = {}
@@ -8,6 +10,12 @@ const matchers = {}
 class Matcher {
     constructor () {
         logger.created && (console.warn(`new ${this.constructor.name}`, this))
+
+        const originScan = this.scan
+        this.scan = (parentRuntime) => {
+            logger.scaning && (console.warn(`${this.constructor.name} scaning`, this))
+            originScan.call(this, parentRuntime)
+        }
     }
 
     suffixNum (m, n) { // 匹配次数
@@ -19,17 +27,41 @@ class Matcher {
         this.n = n
     }
 
+    // 执行扫描操作
     scan () {
         throw Error(`Matcher.scan must be override by ${this.constructor.name}.scan`)
     }
-}
 
-class RootMatcher {
+    match () {
+        throw Error(`Matcher.match must be override by ${this.constructor.name}.match`)
+    }
+
+    matchSuccess () {
+        throw Error(`Matcher.matchSuccess must be override by ${this.constructor.name}.matchSuccess`)
+    }
+
+    matchFailure () {
+        throw Error(`Matcher.matchFailure must be override by ${this.constructor.name}.matchFailure`)
+    }
+}
+Matcher.prototype.m = Matcher.prototype.n = 1
+
+class RootMatcher extends Matcher {
     constructor (resolve, reject) {
+        super()
         this.resolve = resolve
         this.reject = reject
     }
+
+    matchFailure (childRuntime, error) {
+        this.reject(childRuntime, error)
+    }
+
+    matchSuccess (childRuntime) {
+        this.resolve(childRuntime)
+    }
 }
+
 
 class HookMatcher extends Matcher {
     constructor (id, { before, done, source }) {
@@ -42,7 +74,31 @@ class HookMatcher extends Matcher {
     }
 
     scan (parentRuntime) {
-        console.info({ parentRuntime })
+        this._child.scan(parentRuntime.createChild(this))
+    }
+
+    matchSuccess (childRuntime) {
+        const thisRuntime = childRuntime.parent
+        thisRuntime.appendChild(childRuntime)
+        thisRuntime.matchs++
+
+        if (thisRuntime.matchs < this.n) {
+            // 继续下一个分量的扫描
+            this._child.scan(thisRuntime)
+        } else {
+            // 完成扫描
+            thisRuntime.resolve()
+        }
+    }
+
+    matchFailure (childRuntime, error) {
+        const thisRuntime = childRuntime.parent
+        if (thisRuntime.matchs < this.m) {
+            // 当前必选项匹配不足，则匹配失败
+            thisRuntime.reject(error)
+        } else {
+            thisRuntime.resolve()
+        }
     }
 
     _parseSource (id, source) {
@@ -176,21 +232,137 @@ class GroupMatcher extends Matcher {
         this._tempAnd.groupParent = this._tempOr // 子级链回父级分组or，回溯的使用使用
     }
 
+    // 插入新的or分支
     putOr () {
         this._tempAnd = null
     }
 
+    // 完成节点创建
     putEnd () {
         delete this._tempOr
         delete this._tempAnd
     }
+
+    scan (parentRuntime) {
+        const orChild = this._orFirstChild
+        const andChild = orChild.andFirstChild
+        andChild.scan(parentRuntime.createChild(this, { orChild, andChild, tempChilds: [] }))
+    }
+
+    matchSuccess (childRuntime) {
+        // (A{3} B{1,2} | A{2} B{2})
+        // 子项扫描成功，则判断是否是最后项，是则进行下一个分量扫描，否则继续下一个子项扫描
+
+        const thisRuntime = childRuntime.parent
+        let { andChild } = thisRuntime
+
+        if (thisRuntime.tempLastChild) {
+            thisRuntime.tempLastChild.nextSibling = childRuntime
+            childRuntime.previousSibling = thisRuntime.tempLastChild
+            thisRuntime.tempLastChild = childRuntime
+        } else {
+            thisRuntime.tempLastChild = thisRuntime.tempFirstChild = childRuntime
+        }
+
+        // 存在下一个子项
+        if (andChild.nextSibling) {
+            andChild = thisRuntime.andChild = andChild.nextSibling
+            andChild.scan(thisRuntime)
+        } else {
+            thisRuntime.tempChilds.push({ firstChild: thisRuntime.tempFirstChild, lastChild: thisRuntime.tempLastChild })
+            thisRuntime.tempFirstChild = thisRuntime.tempLastChild = null
+            thisRuntime.matchs++
+            if (thisRuntime.matchs < this.n) {
+                // 继续下一个分量的扫描
+                thisRuntime.orChild = this._orFirstChild
+                thisRuntime.andChild = thisRuntime.orChild.andFirstChild
+                thisRuntime.andChild.scan(thisRuntime)
+            } else {
+                // 已经完成了所有的扫描
+                this._resolve(thisRuntime)
+            }
+        }
+    }
+
+    matchFailure (childRuntime, error) {
+        const thisRuntime = childRuntime.parent
+
+        // 回退当前扫描结果
+        if (thisRuntime.tempFirstChild) {
+            thisRuntime.sr.moveTo(thisRuntime.tempFirstChild.bIndex)
+            thisRuntime.tempFirstChild = thisRuntime.tempLastChild = null
+        }
+
+        // 进入或分支进行扫描
+        if (thisRuntime.orChild.nextSibling) {
+            thisRuntime.orChild = thisRuntime.orChild.nextSibling
+            thisRuntime.andChild = thisRuntime.orChild.andFirstChild
+            thisRuntime.andChild.scan(thisRuntime)
+        } else {
+            if (thisRuntime.matchs < this.m) {
+                thisRuntime.reject(error)
+            } else {
+                this._resolve(thisRuntime)
+            }
+        }
+    }
+
+    _resolve (thisRuntime) {
+        let nowLastChild
+        for (let i = 0; i < thisRuntime.tempChilds.length; i++) {
+            const { firstChild, lastChild } = thisRuntime.tempChilds[i]
+            if (nowLastChild) {
+                nowLastChild.nextSibling = firstChild
+                nowLastChild = thisRuntime.lastChild = lastChild
+            } else {
+                thisRuntime.firstChild = firstChild
+                nowLastChild = thisRuntime.lastChild = lastChild
+            }
+        }
+        delete thisRuntime.tempChilds
+        delete thisRuntime.tempFirstChild
+        delete thisRuntime.tempLastChild
+        thisRuntime.resolve()
+    }
 }
+
 class LinkMatcher extends Matcher {
     constructor (id) {
         super()
         this._id = id
     }
+
+    scan (parentRuntime) {
+        matchers[this._id].scan(parentRuntime.createChild(this))
+    }
+
+    matchSuccess (childRuntime) {
+        const thisRuntime = childRuntime.parent
+
+        thisRuntime.appendChild(childRuntime)
+        thisRuntime.matchs++
+
+        if (thisRuntime.matchs < this.n) {
+            // 继续下一个分量的扫描
+            matchers[this._id].scan(thisRuntime)
+        } else {
+            // 完成扫描
+            thisRuntime.resolve()
+        }
+    }
+
+    matchFailure (childRuntime, error) {
+        const thisRuntime = childRuntime.parent
+
+        if (thisRuntime.matchs < this.m) {
+            // 当前必选项匹配不足，则匹配失败
+            thisRuntime.reject(error)
+        } else {
+            thisRuntime.resolve()
+        }
+    }
 }
+
 class RuleMatcher extends Matcher {
     constructor (id, match) {
         super()
@@ -198,18 +370,67 @@ class RuleMatcher extends Matcher {
         this._match = match
         matchers[id] = this
     }
-}
 
+    scan (parentRuntime) {
+        const { sr } = parentRuntime
+        const bIndex = sr.chIndex
+        const thisRuntime = parentRuntime.createChild(this)
+        sr.createRecord()
+        if (this._match(sr)) {
+            sr.removeRecord()
+            thisRuntime.resolve(bIndex, sr.chIndex)
+        } else {
+            sr.rollback()
+            thisRuntime.reject()
+        }
+    }
+}
 class StringMatcher extends Matcher {
-    constructor (stringValue) {
+    constructor (source) {
         super()
-        this._stringValue = stringValue
+        this._source = source
+    }
+
+    scan (parentRuntime) {
+        const { sr } = parentRuntime
+        const thisRuntime = parentRuntime.createChild(this)
+        const bIndex = sr.chIndex
+        const { m, n } = this
+
+        let isSuccess = true
+
+        // 必选集
+        sr.createRecord()
+        for (let i = 0; i < m; i++) {
+            if (!this._match(sr)) {
+                isSuccess = false
+                sr.rollback()
+                break
+            }
+        }
+
+        if (isSuccess) {
+            sr.removeRecord()
+            // 可选集
+            for (let i = m; i < n; i++) {
+                sr.createRecord()
+                if (!this._match(sr)) {
+                    sr.rollback()
+                    break
+                } else {
+                    sr.removeRecord()
+                }
+            }
+            thisRuntime.resolve(bIndex, sr.chIndex)
+        } else {
+            thisRuntime.reject()
+        }
     }
 
     _match (sr) {
-        const stringValue = this._stringValue
-        for (let i = 0, lg = stringValue.length; i < lg; i++) {
-            if (sr.read() !== stringValue[i]) {
+        const source = this._source
+        for (let i = 0, lg = source.length; i < lg; i++) {
+            if (sr.read() !== source[i]) {
                 return false
             }
         }

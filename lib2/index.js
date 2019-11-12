@@ -4,8 +4,8 @@ const Compiler = require('./Compiler')
 const compiler = new Compiler({
     matchers: {
         main: {
-            source: '<w>+',
-            source2: ' <objectField> | <jsExpression> ',
+            // source: '<w>+',
+            source: ' <objectField> | <jsExpression> ',
         },
 
         objectField: {
