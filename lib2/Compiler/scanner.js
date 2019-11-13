@@ -48,7 +48,7 @@ function scanner (code) {
             // console.info('use', sr.chIndex, chAlls)
 
             matcher.scan(new Runtime(null, new RootMatcher((thisRuntime) => {
-                // console.info('resolve===', thisRuntime)
+                console.info('resolve===', thisRuntime)
             }, (thisRuntime, error) => {
                 console.info(thisRuntime, error)
                 throw Error('解析出错啦')
@@ -67,8 +67,9 @@ function scanner (code) {
         moveTo: (chIndex) => sr.chNow = chAlls[sr.chIndex = chIndex],
         createRecord: () => recordStack.push(sr.chIndex),
         removeRecord: () => recordStack.pop(),
+        lastRecord: () => recordStack[recordStack.length - 1],
         rollback: () => sr.moveTo(recordStack.pop()),
-        text: (bIndex, eIndex) => chAlls.slice(bIndex, eIndex).join(''),
+        text: (bIndex, eIndex = bIndex + 100) => chAlls.slice(bIndex, Math.min(chAlls.length, eIndex)).join('').replace(/\n/g, '\\n'),
     }
 
     return sr

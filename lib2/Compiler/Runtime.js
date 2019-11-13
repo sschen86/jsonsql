@@ -1,8 +1,5 @@
-const logger = {
-    create: !true,
-    resolve: true,
-    reject: true,
-}
+
+const logger = require('./logger')
 
 let PID = 0
 class Runtime {
@@ -20,7 +17,7 @@ class Runtime {
             Object.assign(this, extral)
         }
 
-        logger.create && console.warn(`${matcher.constructor.name} Runtime created`, this)
+        logger.runtimeCreated(this)
     }
 
     createChild (matcher, extral) {
@@ -50,19 +47,24 @@ class Runtime {
             this.bIndex = this.sr.chIndex
             this.eIndex = this.sr.chIndex
         }
-        logger.resolve && console.warn(`${this.matcher.constructor.name} resolve ${this.matcher._id}`, this.sr.text(this.bIndex, this.eIndex))
+        logger.resolve(this)
 
         // 触发父级子项扫描成功
         this.parent.matcher.matchSuccess(this)
     }
 
     reject (error) {
-        logger.reject && console.warn(`${this.matcher.constructor.name} reject`, this.matcher, error)
-
-        if (typeof error === 'number') {
-            error = { stack: [ this ], message: '匹配错误', bIndex: error, text: this.sr.text(error) }
-        } else if (typeof error === 'object') {
+        if (error.stack) {
             error.stack.push(this)
+        } else {
+            error.message = '匹配错误'
+            error.text = this.sr.text(error.bIndex)
+            error.stack = [ this ]
+        }
+        logger.reject(this, error)
+
+        if (error.someMatched && this.matcher.stop) {
+            error.stop = true
         }
 
         this.parent.matcher.matchFailure(this, error)

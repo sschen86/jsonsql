@@ -1,19 +1,14 @@
 
-
-const logger = {
-    created: false, // 创建匹配器时
-    scaning: true, // 开始扫描时
-}
-
+const logger = require('./logger')
 const matchers = {}
-
+let PID = 0
 class Matcher {
     constructor () {
-        logger.created && (console.warn(`new ${this.constructor.name}`, this))
-
+        logger.matcherCreated(this)
+        this.PID = PID++
         const originScan = this.scan
         this.scan = (parentRuntime) => {
-            logger.scaning && (console.warn(`${this.constructor.name} scaning 【${parentRuntime.sr.chIndex}  ${parentRuntime.sr.chNow}】`, this))
+            logger.scaning(parentRuntime, this)
             originScan.call(this, parentRuntime)
         }
     }
@@ -45,6 +40,8 @@ class Matcher {
     }
 }
 Matcher.prototype.m = Matcher.prototype.n = 1
+Matcher.prototype.stop = false // 是否阻止进入下一个分支的扫描
+
 
 class RootMatcher extends Matcher {
     constructor (resolve, reject) {
@@ -62,12 +59,13 @@ class RootMatcher extends Matcher {
     }
 }
 class HookMatcher extends Matcher {
-    constructor (id, { before, done, source }) {
+    constructor (id, { before, done, source, exclusive }) {
         super()
         this._id = id
         this._hooks = { before, done }
         this._source = source
         this._child = this._parseSource(id, source)
+
         matchers[id] = this
     }
 
@@ -114,6 +112,7 @@ class HookMatcher extends Matcher {
             /<(\w+)>/, // 匹配link
             /(\()/, /(\))/, // 匹配分组
             /([?*+]|\{\d+\}|\{\d+,(?:\d+)?\}|\{,\d+\})/, // "?", "*", "+", "{n}", "{m,}", "{m,n}", "{,n}"
+            /(&)/, // "&" 失败则阻止进入或分支，直接reject
             /(\|)/, // "|"
         ].map(item => item.source).join('|'), 'g')
         const groupStackTop = () => groupStack[groupStack.length - 1]
@@ -123,6 +122,7 @@ class HookMatcher extends Matcher {
             matchLinkName,
             matchGroupOpen, matchGroupClose,
             matchSuffixNum,
+            matchStop,
             matchOr
         ) => {
             switch (false) {
@@ -176,6 +176,10 @@ class HookMatcher extends Matcher {
                             }
                         }
                     }
+                    break
+                }
+                case !matchStop: {
+                    curMatcher.stop = true
                     break
                 }
                 case !matchOr: {
@@ -285,29 +289,31 @@ class GroupMatcher extends Matcher {
     matchFailure (childRuntime, error) {
         const thisRuntime = childRuntime.parent
 
+        // 子项匹配失败
+
+        // 部分匹配成功了，用于判断是否停止扫描
+        const someMatched = thisRuntime.tempFirstChild && thisRuntime.tempFirstChild.bIndex < thisRuntime.tempLastChild.eIndex
+
         // 回退当前扫描结果
         if (thisRuntime.tempFirstChild) {
             thisRuntime.sr.moveTo(thisRuntime.tempFirstChild.bIndex)
             thisRuntime.tempFirstChild = thisRuntime.tempLastChild = null
         }
 
-        // 进入或分支进行扫描
-        if (thisRuntime.orChild.nextSibling) {
-            // 储存当前错误，进入或分支扫描
 
+        if (thisRuntime.orChild.nextSibling && !error.stop) {
             // 假如新的错误扫描的更远，则更新错误
             thisRuntime.error = thisRuntime.error && thisRuntime.error.bIndex >= error.bIndex ? thisRuntime.error : error
-
-            console.info('######## or分支', thisRuntime)
 
             thisRuntime.orChild = thisRuntime.orChild.nextSibling
             thisRuntime.andChild = thisRuntime.orChild.andFirstChild
             thisRuntime.andChild.scan(thisRuntime)
         } else {
-            if (thisRuntime.matchs < this.m) {
+            // 必选项分量不足，则此次匹配失败
+            // 假如可选集已经存在部分匹配，并且不允许回退，则会触发reject
+            if (thisRuntime.matchs < this.m || (someMatched && error.stop)) {
                 thisRuntime.error = thisRuntime.error && thisRuntime.error.bIndex >= error.bIndex ? thisRuntime.error : error
-
-                console.info('######## 全部错误', thisRuntime)
+                thisRuntime.error.someMatched = someMatched
                 thisRuntime.reject(thisRuntime.error)
             } else {
                 this._resolve(thisRuntime)
@@ -363,7 +369,7 @@ class LinkMatcher extends Matcher {
     matchFailure (childRuntime, error) {
         const thisRuntime = childRuntime.parent
 
-        if (thisRuntime.matchs < this.m) {
+        if (thisRuntime.matchs < this.m || (error.someMatched && this.stop)) {
             // 当前必选项匹配不足，则匹配失败
             thisRuntime.reject(error)
         } else {
@@ -390,7 +396,7 @@ class RuleMatcher extends Matcher {
             thisRuntime.resolve(bIndex, sr.chIndex)
         } else {
             sr.rollback()
-            thisRuntime.reject(bIndex)
+            thisRuntime.reject({ bIndex })
         }
     }
 }
@@ -404,6 +410,7 @@ class StringMatcher extends Matcher {
         const { sr } = parentRuntime
         const thisRuntime = parentRuntime.createChild(this)
         const bIndex = sr.chIndex
+        let matchedEndIndex // 发生错误的下标
         const { m, n } = this
 
         let isSuccess = true
@@ -415,6 +422,8 @@ class StringMatcher extends Matcher {
                 isSuccess = false
                 sr.rollback()
                 break
+            } else {
+                matchedEndIndex = sr.chIndex
             }
         }
 
@@ -432,7 +441,7 @@ class StringMatcher extends Matcher {
             }
             thisRuntime.resolve(bIndex, sr.chIndex)
         } else {
-            thisRuntime.reject(bIndex)
+            thisRuntime.reject({ bIndex, matchedEndIndex, someMatched: matchedEndIndex > bIndex })
         }
     }
 

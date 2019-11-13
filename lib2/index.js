@@ -1,29 +1,33 @@
 
+
 const Compiler = require('./Compiler')
 
 const compiler = new Compiler({
     matchers: {
         main: {
             // source: '<w>+',
-            source: ' <objectField> | <jsExpression> ',
+            source: ' <objectField>& | <jsExpression> ',
         },
 
         objectField: {
             source: `
-                '@' <objectFieldKey> ( ':' <dbFieldKey> )? <eol> | 
-                '@' <objectFieldKey> (
-                    ' ' <objectFiledValueExpression> <eol> |
-                    ( '(' <s>* ')' )? ( <map> | <list> | <block> ) |
-                    '(' <listLength> ')' <list> |
-                    ( ':' <dbTableName> )? '(' <dbSqlExpression>? ')' (
-                        <map> | <list> | <block>
-                    )
+                '@' <objectFieldKey> 
+                (
+                    ( ':' <dbFieldKey> )? <eol> |
+                    ( <s>+ <objectFiledValueExpression> <eol> )& |
+                    ( '(' <s>* ')' )? <block>& |
+                    ( '(' <listLength> ')' <list> )& |
+                    ( ':' <dbTableName> )? '(' <dbSqlExpression>? ')' <block>
                 )
             `,
             before: tb => tb.objectFieldCreate(),
             done: tb => tb.objectFieldComplete(),
             document: (tb, text) => tb.documentCreate(text),
         },
+        block: {
+            source: '<map>& | <list>& | <value>&',
+        },
+
         objectFieldKey: {
             source: ' <w>+ ',
             done: (tb, text) => tb.objectFieldSetKey(text),
@@ -45,28 +49,31 @@ const compiler = new Compiler({
 
         map: {
             source: ` 
-                '{' <eol> <dbFieldDefine>? <objectField>* '}' <eol> 
+                '{' <eol> <dbFieldDefine>? <objectField>*& '}' <eol> 
             `,
             before: tb => tb.mapCreate(),
             done: tb => tb.childCompile(),
+            exclusive: true,
         },
         list: {
             source: `
-                '[' <eol> <dbFieldDefine>? <objectField>* ']' <eol>
+                '[' <eol> <dbFieldDefine>? <objectField>*& ']' <eol>
             `,
             before: (tb) => tb.listCreate(),
             done: tb => tb.childCompile(),
+            exclusive: true,
         },
         listLength: {
             source: ' <d>+ ',
             done: (tb, text) => tb.listSetLength(text),
         },
-        block: {
+        value: {
             source: `
                 '(:' <eol> <dbFieldDefine>? <blockExpression>* <valueReturnExpression> ':)' <eol> 
             `,
             before: tb => tb.block(),
             done: tb => tb.childCompile(),
+            exclusive: true,
         },
         blockExpression: {
             source: function (sr) {
