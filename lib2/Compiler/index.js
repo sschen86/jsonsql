@@ -9,6 +9,24 @@ class Compiler {
         this._initCustomMatchers(matchers)
     }
 
+    compile (code, id = 'main') {
+        const sr = scanner(code)
+        const mainMatcher = this._matchers[id]
+        try {
+            while (sr.notEOF()) {
+                sr.use(mainMatcher)
+            }
+
+            const tree = sr.tree()
+            const code = tree.code()
+
+
+            return { tree, code }
+        } catch (error) {
+            return { error }
+        }
+    }
+
 
     _initSystemMatchers () {
         const matchers = this._matchers
@@ -32,26 +50,6 @@ class Compiler {
             matchers[id] = new HookMatcher(id, matcherOptions[id], this)
         }
     }
-
-
-    run (code, id = 'main') {
-        const sr = scanner(code)
-        const mainMatcher = this._matchers[id]
-        let maxNum = 0
-        try {
-            while (sr.notEOF() && maxNum++ < Infinity) {
-                sr.use(mainMatcher)
-            }
-            return sr.tree()
-        } catch (err) {
-            return sr.error(err)
-        }
-    }
-
-    compile (code) {
-        console.warn(`input compile code is 【${code}】`, this)
-    }
 }
-
 
 module.exports = Compiler

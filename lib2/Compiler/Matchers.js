@@ -4,13 +4,13 @@ const matchers = {}
 let PID = 0
 class Matcher {
     constructor () {
-        logger.matcherCreated(this)
         this.PID = PID++
         const originScan = this.scan
         this.scan = (parentRuntime) => {
             logger.scaning(parentRuntime, this)
             originScan.call(this, parentRuntime)
         }
+        logger.matcherCreated(this)
     }
 
     suffixNum (m, n) { // 匹配次数
@@ -41,8 +41,6 @@ class Matcher {
 }
 Matcher.prototype.m = Matcher.prototype.n = 1
 Matcher.prototype.stop = false // 是否阻止进入下一个分支的扫描
-
-
 class RootMatcher extends Matcher {
     constructor (resolve, reject) {
         super()
@@ -58,11 +56,12 @@ class RootMatcher extends Matcher {
         this.resolve(childRuntime)
     }
 }
+
 class HookMatcher extends Matcher {
-    constructor (id, { before, done, source, exclusive }) {
+    constructor (id, { before, done, document, source }) {
         super()
         this._id = id
-        this._hooks = { before, done }
+        this._hooks = { before, done, document }
         this._source = source
         this._child = this._parseSource(id, source)
 
@@ -109,13 +108,13 @@ class HookMatcher extends Matcher {
         const groupStack = []
         const groupParserRegExp = RegExp([
             /'((?:[^']|\\\\|\\')+)'/, // 匹配字符串
-            /<(\w+)>/, // 匹配link
+            /<(\w+|.)>/, // 匹配link
             /(\()/, /(\))/, // 匹配分组
             /([?*+]|\{\d+\}|\{\d+,(?:\d+)?\}|\{,\d+\})/, // "?", "*", "+", "{n}", "{m,}", "{m,n}", "{,n}"
             /(&)/, // "&" 失败则阻止进入或分支，直接reject
             /(\|)/, // "|"
         ].map(item => item.source).join('|'), 'g')
-        const groupStackTop = () => groupStack[groupStack.length - 1]
+        const groupStackTop = () => groupStack[groupStack.length - 1].matcher
         const groupParser = (
             all,
             matchString,
@@ -123,7 +122,8 @@ class HookMatcher extends Matcher {
             matchGroupOpen, matchGroupClose,
             matchSuffixNum,
             matchStop,
-            matchOr
+            matchOr,
+            index
         ) => {
             switch (false) {
                 case !matchString: {
@@ -145,12 +145,13 @@ class HookMatcher extends Matcher {
                     const newMatcher = new GroupMatcher()
                     curMatcher.putChild(newMatcher)
                     curMatcher = newMatcher
-                    groupStack.push(curMatcher)
+                    groupStack.push({ matcher: curMatcher, index })
                     break
                 }
                 case !matchGroupClose: {
-                    curMatcher = groupStack.pop()
-                    curMatcher.putEnd()
+                    const groupStackPop = groupStack.pop()
+                    curMatcher = groupStackPop.matcher
+                    curMatcher.putEnd(source.slice(groupStackPop.index, index + 1))
                     break
                 }
                 case !matchSuffixNum: {
@@ -191,11 +192,11 @@ class HookMatcher extends Matcher {
         }
 
         if (typeof source === 'string') {
-            curMatcher = new GroupMatcher(id)
-            groupStack.push(curMatcher)
+            curMatcher = new GroupMatcher()
+            groupStack.push({ matcher: curMatcher })
             source.replace(/\/\/\/|\/\*[\w\W]*\*\//g, '').replace(groupParserRegExp, groupParser)
-            curMatcher = groupStack.pop()
-            curMatcher.putEnd()
+            curMatcher = groupStack.pop().matcher
+            curMatcher.putEnd(source)
             return curMatcher
         }
 
@@ -204,8 +205,9 @@ class HookMatcher extends Matcher {
 }
 
 class GroupMatcher extends Matcher {
-    constructor () {
+    constructor (source) {
         super()
+        this._source = source
         this._tempOr = null
         this._tempAnd = null
         this._orFirstChild = null
@@ -240,10 +242,12 @@ class GroupMatcher extends Matcher {
     }
 
     // 完成节点创建
-    putEnd () {
+    putEnd (source) {
+        this._source = source
         delete this._tempOr
         delete this._tempAnd
     }
+
 
     scan (parentRuntime) {
         const orChild = this._orFirstChild

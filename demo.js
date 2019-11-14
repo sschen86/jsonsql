@@ -1,5 +1,5 @@
 const jsonsql = require('./index')
-
+const beautify_js = require('js-beautify').js
 
 /*
 const result = jsonsql.compile(`
@@ -23,6 +23,10 @@ const result = jsonsql.compile(`
 // @age3 3
 console.timeEnd('compile')
 console.info(result)
+
+if (result.code) {
+    document.body.innerHTML = `<textarea style="width:100%; height:1000px" autocomplete="off">${beautify_js(result.code)}</textarea>`
+}
 
 
 window.onfocus = function () {

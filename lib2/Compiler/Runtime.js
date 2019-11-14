@@ -74,9 +74,7 @@ class Runtime {
 Runtime.prototype.resolve = killRecursion(Runtime.prototype.resolve)
 Runtime.prototype.reject = killRecursion(Runtime.prototype.reject)
 
-
 module.exports = Runtime
-
 
 function killRecursion (recursion) {
     let scanIsRun = false

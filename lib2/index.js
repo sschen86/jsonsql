@@ -5,29 +5,24 @@ const Compiler = require('./Compiler')
 const compiler = new Compiler({
     matchers: {
         main: {
-            // source: '<w>+',
-            source: ' <objectField>& | <jsExpression> ',
+            source: ' <objectField>& | <js> ',
         },
 
         objectField: {
             source: `
                 '@' <objectFieldKey> 
                 (
-                    ( ':' <dbFieldKey> )? <eol> |
+                    ( '#' <dbFieldKey> )? <eol> |
                     ( <s>+ <objectFiledValueExpression> <eol> )& |
                     ( '(' <s>* ')' )? <block>& |
-                    ( '(' <listLength> ')' <list> )& |
-                    ( ':' <dbTableName> )? '(' <dbSqlExpression>? ')' <block>
+                    ( '(' <listLength> ')' <list>& ) |
+                    ( '#' <dbTableName> )? '(' <dbSqlConditionExpression> ')' <block>
                 )
             `,
             before: tb => tb.objectFieldCreate(),
-            done: tb => tb.objectFieldComplete(),
+            done: tb => tb.childComplete(),
             document: (tb, text) => tb.documentCreate(text),
         },
-        block: {
-            source: '<map>& | <list>& | <value>&',
-        },
-
         objectFieldKey: {
             source: ' <w>+ ',
             done: (tb, text) => tb.objectFieldSetKey(text),
@@ -47,20 +42,23 @@ const compiler = new Compiler({
             done: (tb, text) => tb.objectFieldSetValueExpression(text),
         },
 
+        block: {
+            source: '<map>& | <list>& | <value>&',
+        },
         map: {
             source: ` 
-                '{' <eol> <dbFieldDefine>? <objectField>*& '}' <eol> 
+                '{' <eol> <dbFieldsDefineExpression>? <objectField>*& '}' <eol> 
             `,
             before: tb => tb.mapCreate(),
-            done: tb => tb.childCompile(),
+            done: tb => tb.childComplete(),
             exclusive: true,
         },
         list: {
             source: `
-                '[' <eol> <dbFieldDefine>? <objectField>*& ']' <eol>
+                '[' <eol> <dbFieldsDefineExpression>? <objectField>*& ']' <eol>
             `,
             before: (tb) => tb.listCreate(),
-            done: tb => tb.childCompile(),
+            done: tb => tb.childComplete(),
             exclusive: true,
         },
         listLength: {
@@ -69,13 +67,13 @@ const compiler = new Compiler({
         },
         value: {
             source: `
-                '(:' <eol> <dbFieldDefine>? <blockExpression>* <valueReturnExpression> ':)' <eol> 
+                '(:' <eol> <dbFieldsDefineExpression>? <valueBlockExpression>* <valueReturnExpression> ':)' <eol> 
             `,
-            before: tb => tb.block(),
-            done: tb => tb.childCompile(),
+            before: tb => tb.valueCreate(),
+            done: tb => tb.childComplete(),
             exclusive: true,
         },
-        blockExpression: {
+        valueBlockExpression: {
             source: function (sr) {
                 const text = []
                 while (true) {
@@ -91,7 +89,7 @@ const compiler = new Compiler({
                 }
                 return true
             },
-            done: (tb, text) => tb.setBlockExpression(text),
+            done: (tb, text) => tb.valueSetBlockExpression(text),
         },
         valueReturnExpression: {
             source (sr) {
@@ -105,12 +103,16 @@ const compiler = new Compiler({
                 }
                 return true
             },
-            done: (tb, text) => tb.setValueReturnExpression(text.slice(2, -1)),
+            done: (tb, text) => tb.valueSetReturnExpression(text.slice(2, -1)),
         },
 
-        jsExpression: {
+        js: {
             source: ' <.>+ <eol> ',
-            done: (tb, text) => tb.setJsExpression(text.slice(0, -1)),
+            before: tb => tb.jsCreate(),
+            done: (tb, text) => {
+                tb.jsSetCodeExpression(text.slice(0, -1))
+                tb.childComplete()
+            },
         },
 
         dbFieldKey: {
@@ -123,7 +125,7 @@ const compiler = new Compiler({
             source: ' <w>+ ',
             done: (tb, text) => tb.dbSetTableName(text),
         },
-        dbSqlExpression: {
+        dbSqlConditionExpression: {
             source (sr) {
                 let hasMatched = false
                 let isEscape = false // 是否遇到转义反斜杠
@@ -150,9 +152,9 @@ const compiler = new Compiler({
 
                 return hasMatched
             },
-            done: (tb, text) => tb.dbSetSqlExpression(text),
+            done: (tb, text) => tb.dbSetSqlConditionExpression(text),
         },
-        dbFieldDefine: {
+        dbFieldsDefineExpression: {
             source (sr) {
                 if (sr.read() !== '#') {
                     return false
@@ -168,12 +170,12 @@ const compiler = new Compiler({
                 }
                 return /^\(.+?\)$/.test(text.join(''))
             },
-            done: (tb, text) => tb.dbSetFieldDefine(text.slice(2, -2)),
+            done: (tb, text) => tb.dbSetFieldsDefineExpression(text.slice(2, -2)),
         },
 
     },
 })
 
 module.exports = {
-    compile: code => compiler.run(code),
+    compile: code => compiler.compile(code),
 }

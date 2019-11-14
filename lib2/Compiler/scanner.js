@@ -1,5 +1,6 @@
 const Runtime = require('./Runtime')
 const { RootMatcher } = require('./Matchers')
+const treeBuilder = require('./treeBuilder')
 
 module.exports = scanner
 
@@ -8,7 +9,86 @@ function scanner (code) {
     const [ chAlls, chMaps ] = [ [], [] ]
 
     // 初始化代码数据
-    ;(() => {
+    init()
+
+    const recordStack = []
+    const runtimes = []
+    const sr = {
+        EOF,
+        EOL,
+        chAlls,
+        chIndex: 0,
+        chNow: BOF,
+        notEOF: () => sr.chIndex < chAlls.length,
+        use (matcher) {
+            matcher.scan(new Runtime(null, new RootMatcher((thisRuntime) => {
+                runtimes.push(thisRuntime)
+            }, (thisRuntime, error) => {
+                const codeInfo = info(error.bIndex)
+                // eslint-disable-next-line no-throw-literal
+                throw {
+                    message: '编译错误',
+                    line: codeInfo.line,
+                    column: codeInfo.column,
+                    text: chAlls.slice(...codeInfo.range).join(''),
+                }
+            }), { sr }))
+        },
+        read: () => {
+            if (sr.chIndex === chAlls.length) { // 处于文件结尾
+                throw Error('ch已经到达结尾')
+            }
+            return sr.chNow = chAlls[sr.chIndex++]
+        },
+        back: () => sr.chNow = chAlls[--sr.chIndex],
+        moveTo: (chIndex) => sr.chNow = chAlls[sr.chIndex = chIndex],
+        createRecord: () => recordStack.push(sr.chIndex),
+        removeRecord: () => recordStack.pop(),
+        lastRecord: () => recordStack[recordStack.length - 1],
+        rollback: () => sr.moveTo(recordStack.pop()),
+        text: (bIndex, eIndex = bIndex + 100) => chAlls.slice(bIndex, Math.min(chAlls.length, eIndex)).join('').replace(/\n/g, '\\n'),
+        tree () {
+            const tb = treeBuilder()
+            const walkRuntimes = (runtime) => {
+                if (!runtime) {
+                    return
+                }
+
+                let text
+                const matcher = runtime.matcher
+                const hooks = matcher._hooks
+
+                if (hooks) {
+                    text = chAlls.slice(runtime.bIndex, runtime.eIndex).join('')
+                    hooks.before && hooks.before(tb, text)
+                }
+
+                if (runtime.firstChild) {
+                    walkRuntimes(runtime.firstChild)
+                }
+
+                if (hooks) {
+                    hooks.done && hooks.done(tb, text)
+                    hooks.document && hooks.document(tb, info(runtime.bIndex).document)
+                }
+
+                if (runtime.nextSibling) {
+                    walkRuntimes(runtime.nextSibling)
+                }
+            }
+
+            runtimes.forEach(walkRuntimes)
+
+            // walkRuntimes(runtimes[0])
+            // walkRuntimes(runtimes[1])
+
+            return tb.getValue()
+        },
+    }
+
+    return sr
+
+    function init () {
         let lineNum = -1 // 原始行标，因为要对空行进行过滤
         code.split(/\r\n?|\r?\n/).forEach(line => {
             line = line.trim()
@@ -35,42 +115,39 @@ function scanner (code) {
             const eIndex = chAlls.length
             chMaps.push([ lineNum, bIndex, eIndex, document ])
         })
-    })()
-
-    const recordStack = []
-    const sr = {
-        EOF,
-        EOL,
-        chIndex: 0,
-        chNow: BOF,
-        notEOF: () => sr.chIndex < chAlls.length,
-        use (matcher) {
-            // console.info('use', sr.chIndex, chAlls)
-
-            matcher.scan(new Runtime(null, new RootMatcher((thisRuntime) => {
-                console.info('resolve===', thisRuntime)
-            }, (thisRuntime, error) => {
-                console.info(thisRuntime, error)
-                throw Error('解析出错啦')
-            }), { sr }))
-        },
-        read: () => {
-            if (sr.chIndex === chAlls.length) { // 处于文件结尾
-                throw Error('ch已经到达结尾')
-            }
-            return sr.chNow = chAlls[sr.chIndex++]
-        },
-        back: () => sr.chNow = chAlls[--sr.chIndex],
-        error (err) {
-            console.error(err)
-        },
-        moveTo: (chIndex) => sr.chNow = chAlls[sr.chIndex = chIndex],
-        createRecord: () => recordStack.push(sr.chIndex),
-        removeRecord: () => recordStack.pop(),
-        lastRecord: () => recordStack[recordStack.length - 1],
-        rollback: () => sr.moveTo(recordStack.pop()),
-        text: (bIndex, eIndex = bIndex + 100) => chAlls.slice(bIndex, Math.min(chAlls.length, eIndex)).join('').replace(/\n/g, '\\n'),
     }
 
-    return sr
+    function info (index) {
+        const map = chMaps
+        const mapLength = map.length - 1
+
+        let bSection = 0
+        let eSection = mapLength
+        let nSection = bSection
+        let i = 1000 // 越界中断标识
+        while (i--) {
+            // nSection = Math.ceil((bSection + eSection) / 2)
+
+            const item = map[nSection] // 二分法取值
+            const bIndex = item[1]
+            const eIndex = item[2]
+
+            // console.info({ nSection, index, bIndex, eIndex })
+
+            if (index >= bIndex && index < eIndex) {
+                return {
+                    range: item.slice(1, 3),
+                    line: item[0], // 行
+                    column: index - bIndex + 1, // 列
+                    document: item[3], // 文档
+                }
+            } else if (index < bIndex) { // 向前搜
+                eSection = nSection
+                nSection = Math.floor((eSection + bSection) / 2) // 把当前值作为结束区间
+            } else { // 向后搜
+                bSection = nSection
+                nSection = Math.ceil((eSection + bSection) / 2) // 把当前值作为开始区间
+            }
+        }
+    }
 }

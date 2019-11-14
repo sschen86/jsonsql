@@ -1,40 +1,67 @@
 
-let indent = 0
+let indentSize = 0
 const matcherCreated = !true
 const runtimeCreated = !true
 const scaning = !true
 const resolve = !true
 const reject = !true
 
+const indentSpace = '  '
+const indent = (changeSize) => {
+    if (changeSize === -1) {
+        return Array(Math.max(0, indentSize--)).join(indentSpace)
+    } else if (changeSize === 1) {
+        return Array(++indentSize).join(indentSpace)
+    } else {
+        return Array(indentSize).join(indentSpace)
+    }
+}
+const matcherIdentfier = (matcher) => `${matcher.PID}.${matcher.constructor.name}`
+const matcherInfo = (matcher) => {
+    // LinkMatcher
+    if (matcher._id) {
+        return ` "${matcher._id}" `
+    }
+
+    // StringMatcher
+    if (matcher._source) {
+        return ` "${matcher._source}" `
+    }
+    return ''
+}
+const chNow = (sr) => {
+    const index = sr.chIndex
+    const chNow = sr.chAlls[index]
+    return `【${index}: ${chNow === sr.EOL ? '\\n' : chNow}】`
+}
+const matchedString = (runtime) => `【${runtime.sr.text(runtime.bIndex, runtime.eIndex)}】`
+
 module.exports = {
     matcherCreated (matcher) {
         if (matcherCreated) {
-            console.warn(`${Array(indent).join('  ')}${matcher.PID}.${matcher.constructor.name}  matcherCreated`, [ matcher ])
+            console.warn(`${indent(0)}${matcherIdentfier(matcher)}  created`, [ matcher ])
         }
     },
     runtimeCreated (thisRuntime) {
         if (runtimeCreated) {
-            console.warn(`${Array(indent).join('  ')}${thisRuntime.matcher.PID}. ${thisRuntime.matcher.constructor.name} runtimeCreated`, [ thisRuntime ])
+            console.warn(`${indent(0)}${matcherIdentfier(thisRuntime.matcher)}.Runtime created`, [ thisRuntime ])
         }
     },
     scaning ({ sr }, matcher) {
-        ++indent
         if (scaning) {
-            console.warn(`${Array(indent).join('  ')}${matcher.PID}.${matcher.constructor.name}${matcher._id ? `.${matcher._id}` : ''} scaning 【${sr.chIndex}: ${sr.chNow === sr.EOL ? '\\n' : sr.chNow}】`, [ matcher ])
+            console.warn(`${indent(1)}${matcherIdentfier(matcher)}${matcherInfo(matcher)} scaning ${chNow(sr)}`, [ matcher ])
         }
     },
     resolve (thisRuntime) {
         if (resolve) {
-            const { matcher, sr } = thisRuntime
-            console.warn(`${Array(indent).join('  ')}${matcher.PID}.${matcher.constructor.name}${matcher._id ? `.${matcher._id}` : ''} resolve 【${sr.text(thisRuntime.bIndex, thisRuntime.eIndex)}】`, [ matcher ])
+            const { matcher } = thisRuntime
+            console.warn(`${indent(-1)}${matcherIdentfier(matcher)}${matcherInfo(matcher)} resolve ${matchedString(thisRuntime)}`, [ matcher ])
         }
-        --indent
     },
     reject (thisRuntime, error) {
         if (reject) {
-            const { matcher, sr } = thisRuntime
-            console.error(`${Array(indent).join('  ')}${matcher.PID}.${matcher.constructor.name}${matcher._id ? `.${matcher._id}` : ''} reject 【${sr.chIndex}: ${sr.chNow === sr.EOL ? '\\n' : sr.chNow}】`, [ matcher, error ])
+            const { sr, matcher } = thisRuntime
+            console.error(`${indent(-1)}${matcherIdentfier(matcher)}${matcherInfo(matcher)} reject ${chNow(sr)}`, [ matcher, error ])
         }
-        --indent
     },
 }

@@ -21,28 +21,35 @@ const last = `
         @cccccccccc 2222222222222
         @dddddddddd 2222222222222
         @eeeeeeeeeeeee 2222222222222
-        @kddlskdsl
+       @kddlskdsl
     ]
 }
 `
 
 let newCode2 = ''
 let newCode = wrapper
-const maxNum = 10000
+const maxNum = 10
 for (let i = 0; i < maxNum; i++) {
     newCode = newCode.replace('######PLACEHOLDER######', wrapper)
 }
 newCode = newCode.replace('######PLACEHOLDER######', last)
 newCode2 = ''
+newCode = `
+@market(where marketId = {#mid} and marketFloor = "#"){ /// String 市场数据
+    #(marketFloor)
 
-newCode2 = `
+}
+`
+
+
+newCode = `
 @goodsInfo(){ /// map 商品数据
     @goodsId 30367897++ /// Long 商品Id666
     @tbGoodsId 234123 /// Long 淘宝商品id
     @goodsVideoUrl  'https://cloud.video.taobao.com/play/u/1617209947/p/1/e/6/t/1/50057774541.mp4' /// string,null  商品主图视频url
     @title '日韩系堆堆袜日韩系堆堆袜日韩系堆堆袜日韩系堆堆袜E6-1-101 P14' /// string 商品标题
     @imgUrls(: /// string 商品图片src
-        #imgs = [
+        let imgs = [
             'http://imgs.571xz.net/qz-img/main/23055260/1526471021641O.jpg',
             'https://img.alicdn.com/bao/uploaded/i3/109520515/TB239QbeTvI8KJjSspjXXcgjXXa_!!109520515.jpg',
             'https://img.alicdn.com/bao/uploaded/i1/109520515/TB2RMVqaQfb_uJjSsD4XXaqiFXa_!!109520515.jpg',
@@ -99,6 +106,9 @@ newCode2 = `
     :)
 }
 
+const a = 12
+const b = 12
+
 @shopInfo(){ /// map 店铺信息
     @marketName '四季星座666' /// string 市场2xxx
     @marketId '123' /// string 市场id
@@ -117,6 +127,30 @@ newCode2 = `
     ]
     @tbAutoState [0,1,2]?? /// init 淘宝授权状态，0（未授权），1（同步授权），2（授权过期）
     @tbUrl '//xx.taobao.com' /// string,null  淘宝链接
+}
+
+@json(){
+    @success true
+    @market(where marketId = {#mid} and marketFloor = "#"){ /// String 市场数据
+        @webSite#website /// String 市场所在站点标识
+        @marketName /// String 市场名称
+        @floors#market(where marketId = {#mid} and marketFloor != "#")[ /// map  楼层数据
+            #(marketFloor)
+            @title#marketFloor  /// string 楼层标题
+            @stores#shop(where marketId = {#mid} and marketFloor = "{$marketFloor}")[ /// map 楼层中的店铺列表
+                #(goodsServices)
+                @storeId#shopId   /// [Long]    店铺ID
+                @num#shopNo   /// [String]    档口号
+                @isNew  [0,1]?? /// [Integer]    新品标识，1为新品
+                @cate ['如旗舰店', '发现好货']??  ///  [String]    类目标识，如旗舰店、发现好货
+                @tags $goodsServices.split(',')  /// [List_Integer]    退换服务，1退，2换
+            ]
+        ]
+        @marketTags#market(where marketFloor = "#")[  /// map 其它市场列表
+            @mid#marketId        /// [Long]    市场ID
+            @name#marketName   /// [String]    市场名称
+        ]
+    }
 }
 `
 console.info(newCode)
