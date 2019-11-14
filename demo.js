@@ -18,6 +18,13 @@ console.time('compile')
 const result = jsonsql.compile(`
     ${bigJsonSqlCode}
 `)
+
+const data = result.execute({
+    name: 12,
+    data: [ 1, 3, 4 ],
+})
+
+
 // @2age 1 /// + string,null 年龄
 // @age2 2 /// - string,nll 年龄2
 // @age3 3

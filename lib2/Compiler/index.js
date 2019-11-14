@@ -1,6 +1,7 @@
 
 const { RuleMatcher, HookMatcher } = require('./Matchers')
 const scanner = require('./scanner')
+const interpreter = require('./interpreter')
 
 class Compiler {
     constructor ({ matchers }) {
@@ -19,9 +20,9 @@ class Compiler {
 
             const tree = sr.tree()
             const code = tree.code()
+            const execute = interpreter.use(code)
 
-
-            return { tree, code }
+            return { tree, code, execute }
         } catch (error) {
             return { error }
         }
